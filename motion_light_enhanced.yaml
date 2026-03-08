@@ -1,0 +1,75 @@
+blueprint:
+  name: Motion-activated Light (Enhanced)
+  description: Turn on a light when motion is detected, with proper manual override support.
+  domain: automation
+  source_url: https://github.com/petarivanov-msft/Motion-activated-Light-enhanced-/blob/main/motion_light_enhanced.yaml
+  input:
+    motion_entity:
+      name: Motion Sensor
+      selector:
+        entity:
+          filter:
+            - device_class: occupancy
+              domain: binary_sensor
+            - device_class: motion
+              domain: binary_sensor
+    light_target:
+      name: Light
+      selector:
+        target:
+          entity:
+            domain: light
+    no_motion_wait:
+      name: Wait time
+      description: Time to leave the light on after last motion is detected.
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input motion_entity
+    from: "off"
+    to: "on"
+  - platform: state
+    entity_id: !input motion_entity
+    from: "on"
+    to: "off"
+
+condition: []
+
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'on' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+          - wait_for_trigger:
+              - platform: state
+                entity_id: !input motion_entity
+                from: "on"
+                to: "off"
+          - delay: !input no_motion_wait
+          - service: light.turn_off
+            target: !input light_target
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'off' }}"
+          - condition: state
+            entity_id: !input light_target
+            state: "on"
+        sequence:
+          - delay: !input no_motion_wait
+          - condition: state
+            entity_id: !input motion_entity
+            state: "off"
+          - service: light.turn_off
+            target: !input light_target
